@@ -77,8 +77,34 @@ const remove = async (id) => {
   return order.id;
 };
 
-const getByStatus = async (status) => {
-  const orders = await Order.find({ status }).populate("items");
+const getByStatus = async (status, start, end) => {
+  const orders = await Order.aggregate([
+    {
+      $match: {
+        $and: [
+          {
+            $expr: {
+              $cond: [
+                { $in: [start, [null, "", "undefined"]] },
+                true,
+                { $gt: ["$createdAt", new Date(start)] }
+              ]
+            }
+          },
+          {
+            $expr: {
+              $cond: [
+                { $in: [end, [null, "", "undefined"]] },
+                true,
+                { $lt: ["$createdAt", new Date(end)] }
+              ]
+            }
+          },
+          { status }
+        ]
+      }
+    }
+  ]).exec();
   return orders;
 };
 
