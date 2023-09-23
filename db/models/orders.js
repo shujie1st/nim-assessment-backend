@@ -77,9 +77,90 @@ const remove = async (id) => {
   return order.id;
 };
 
-const getByStatus = async (status) => {
-  const orders = await Order.find({ status }).populate("items");
+const getByStatus = async (status, start, end) => {
+  const orders = await Order.aggregate([
+    {
+      $match: {
+        $and: [
+          {
+            $expr: {
+              $cond: [
+                { $in: [start, [null, "", "undefined"]] },
+                true,
+                { $gt: ["$createdAt", new Date(start)] }
+              ]
+            }
+          },
+          {
+            $expr: {
+              $cond: [
+                { $in: [end, [null, "", "undefined"]] },
+                true,
+                { $lt: ["$createdAt", new Date(end)] }
+              ]
+            }
+          },
+          { status }
+        ]
+      }
+    }
+  ]).exec();
   return orders;
+};
+
+const getTotalSales = async (start, end) => {
+  const data = (
+    await Order.aggregate([
+      {
+        $match: {
+          $and: [
+            {
+              $expr: {
+                $cond: [
+                  { $in: [start, [null, "", "undefined"]] },
+                  true,
+                  { $gt: ["$createdAt", new Date(start)] }
+                ]
+              }
+            },
+            {
+              $expr: {
+                $cond: [
+                  { $in: [end, [null, "", "undefined"]] },
+                  true,
+                  { $lt: ["$createdAt", new Date(end)] }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        $unwind: "$items"
+      },
+      {
+        $lookup: {
+          from: "menuitems",
+          localField: "items.item",
+          foreignField: "_id",
+          as: "menuitem"
+        }
+      },
+      {
+        $group: {
+          _id: "totalSales",
+          total_items: { $sum: 1 },
+          total: {
+            $sum: {
+              $multiply: [{ $first: "$menuitem.price" }, "$items.quantity"]
+            }
+          }
+        }
+      }
+    ]).exec()
+  )[0];
+
+  return data;
 };
 
 module.exports = {
@@ -89,5 +170,6 @@ module.exports = {
   update,
   remove,
   getByStatus,
-  Order
+  Order,
+  getTotalSales
 };
